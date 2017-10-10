@@ -79,7 +79,6 @@ class Plugin extends PluginBase
         $backendUri = Config::get('cms.backendUri');
         $requestUrl = Request::url();
         $currentHostUrl = Request::getHost();
-
         /*
          * Get domain to theme bindings from cache, if it's not there, load them from database,
          * save to cache and use for theme selection.
@@ -101,6 +100,13 @@ class Plugin extends PluginBase
 
             }
         );
+        // $s = parse_url($binds[464]['domain'])['host'];
+        // $t = $currentHostUrl;
+        // var_dump($s);
+        // echo('<br/>');
+        // var_dump($t);
+        // dd( stristr($t, $s, TRUE) );
+
         /*
          * Oooops something went wrong, abort.
          */
@@ -145,13 +151,23 @@ class Plugin extends PluginBase
                         $theme = $configs['theme'];
                     }
                     
-                }else{
-                    foreach ($binds as $lokasi => $bind) {
-                        if (preg_match('/'.$currentHostUrl.'/i', $bind['domain'])) {
-                            Config::set('app.url', $bind['domain']);
-                            $theme = $bind['theme'];
-                        }
+                }elseif( !App::runningInBackend() && !App::runningInConsole() ) {
+                    $url = str_slug('multhem-'.$currentHostUrl);
+                    if( Cache::has($url) )
+                    {
+                        $bind = Cache::get($url);                        
+                    }else{
+                        $bind = Cache::rememberForever($url , function() use($binds, $currentHostUrl, $url) {
+                            foreach ($binds as $lokasi => $bind) {                       
+                                if (stristr($currentHostUrl, parse_url($bind['domain'])['host'], TRUE) === "" ) {
+                                    return $bind;
+                                }
+                            }
+                        });
                     }
+                    $theme = $bind['theme'];
+                    Config::set('app.url', $bind['domain']);
+                    
                 }        
                 return $theme;    
             }
