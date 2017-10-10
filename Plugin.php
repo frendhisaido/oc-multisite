@@ -1,5 +1,6 @@
 <?php namespace Keios\Multisite;
 
+use Cms\Controllers\Themes;
 use System\Classes\PluginBase;
 use Keios\Multisite\Models\Setting;
 use BackendAuth;
@@ -10,6 +11,7 @@ use Cache;
 use Request;
 use App;
 use Flash;
+use Backend\Widgets\Form;
 
 /**
  * Multisite Plugin Information File
@@ -68,6 +70,7 @@ class Plugin extends PluginBase
 
     /**
      * Multisite boot method
+     *
      * @throws \Symfony\Component\HttpKernel\Exception\HttpException
      * @throws \UnexpectedValueException
      */
@@ -96,7 +99,8 @@ class Plugin extends PluginBase
 
                 return $cacheableRecords;
 
-            });
+            }
+        );
         /*
          * Oooops something went wrong, abort.
          */
@@ -107,10 +111,11 @@ class Plugin extends PluginBase
          * Check if this request is in backend scope and is using domain,
          * that is protected from using backend
          */
-        foreach ($binds as $domain => $bind) {
+        foreach ($binds as $lokasi => $bind) {
             if (preg_match('/\\'.$backendUri.'/', $requestUrl) && preg_match(
                     '/'.$currentHostUrl.'/i',
-                    $domain) && $bind['is_protected']
+                    $bind['domain']
+                ) && $bind['is_protected']
             ) {
                 return App::abort(401, 'Unauthorized.');
             }
@@ -122,7 +127,7 @@ class Plugin extends PluginBase
          */
         if (preg_match('/\\'.$backendUri.'/', $requestUrl)) {
             return null;
-        }
+        }        
         /*
          * Listen for CMS activeTheme event, change theme according to binds
          * If there's no match, let CMS set active theme
@@ -130,14 +135,39 @@ class Plugin extends PluginBase
         Event::listen(
             'cms.theme.getActiveTheme',
             function () use ($binds, $currentHostUrl) {
-                foreach ($binds as $domain => $bind) {
-                    if (preg_match('/'.$currentHostUrl.'/i', $domain)) {
-                        Config::set('app.url', $domain);
-
-                        return $bind['theme'];
+                $theme = null;
+                if( App::runningInBackend()  && !App::runningInConsole() )
+                {
+                    $configs = $binds[BackendAuth::getUser()->lokasi_id];
+                    
+                    if ($configs) {
+                        Config::set('app.url', $configs['domain']);
+                        $theme = $configs['theme'];
                     }
+                    
+                }else{
+                    foreach ($binds as $lokasi => $bind) {
+                        if (preg_match('/'.$currentHostUrl.'/i', $bind['domain'])) {
+                            Config::set('app.url', $bind['domain']);
+                            $theme = $bind['theme'];
+                        }
+                    }
+                }        
+                return $theme;    
+            }
+        );
+
+        Event::listen(
+            'backend.page.beforeDisplay',
+            function (Backend\Classes\Controller $widget) {
+
+                if (!$widget instanceof Themes) {
+                    return;
                 }
-            });
+                
+                $widget->addViewPath('$/keios/multisite/partials/');
+            }
+        );
     }
 
 }
